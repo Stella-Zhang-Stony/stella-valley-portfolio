@@ -13,7 +13,7 @@ export default function Contact({ language }: ContactProps) {
   const [submitted, setSubmitted] = useState(false);
   const [copyState, setCopyState] = useState<'none' | 'email' | 'phone' | 'wechat'>('none');
 
-  // Exact 3 contact channels
+  // Exact contact channels
   const contactChannels = [
     {
       id: 'email' as const,
@@ -25,18 +25,9 @@ export default function Contact({ language }: ContactProps) {
       href: 'mailto:zwy2588867@gmail.com',
     },
     {
-      id: 'phone' as const,
-      label: language === 'zh' ? '国际/国内电话' : 'Mobile Phone',
-      value: '(+86) 19822777269',
-      subtext: language === 'zh' ? '工作日/紧急事宜联络方式' : 'For urgent project coordination',
-      actionLabel: language === 'zh' ? '拨打电话' : 'Dial Phone',
-      icon: Phone,
-      href: 'tel:+8619822777269',
-    },
-    {
       id: 'wechat' as const,
       label: language === 'zh' ? '微信平台与网络' : 'WeChat / LinkedIn',
-      value: 'Stella Zhang',
+      value: 'Stella_Zhang11',
       subtext: language === 'zh' ? '添加微信咨询合作与详情' : 'Add on WeChat to collaborate',
       actionLabel: language === 'zh' ? '复制微信' : 'Copy ID',
       icon: MessageSquare,
@@ -115,35 +106,34 @@ export default function Contact({ language }: ContactProps) {
                   </div>
 
                   <div className="flex items-center gap-2 mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-850 justify-end">
-                    {chan.id === 'phone' ? (
+                    {chan.id === 'email' && (
                       <a
                         href={chan.href}
-                        className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
-                        id={`contact-action-call-${chan.id}`}
+                        className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer mr-3"
+                        id={`contact-action-link-${chan.id}`}
                       >
-                        <span>{chan.actionLabel}</span>
+                        <span>{language === 'zh' ? '在线发信' : 'Email Now'}</span>
                       </a>
-                    ) : (
-                      <button
-                        onClick={(e) => handleCopy(chan.value, chan.id, e)}
-                        className={`text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer
-                          ${isCopied ? 'text-emerald-500' : 'text-indigo-500 hover:text-indigo-400'}
-                        `}
-                        id={`contact-action-copy-${chan.id}`}
-                      >
-                        {isCopied ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>{language === 'zh' ? '已复制' : 'Copied!'}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>{chan.actionLabel}</span>
-                          </>
-                        )}
-                      </button>
                     )}
+                    <button
+                      onClick={(e) => handleCopy(chan.value, chan.id, e)}
+                      className={`text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer
+                        ${isCopied ? 'text-emerald-500' : 'text-indigo-500 hover:text-indigo-400'}
+                      `}
+                      id={`contact-action-copy-${chan.id}`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{language === 'zh' ? '已复制' : 'Copied!'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{chan.actionLabel}</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               );

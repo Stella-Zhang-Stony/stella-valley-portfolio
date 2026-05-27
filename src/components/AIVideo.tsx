@@ -131,12 +131,12 @@ export default function AIVideo({ language }: AIVideoProps) {
                 </span>
               </div>
               <h3 className="font-display text-2xl font-extrabold text-white mb-3">
-                {language === 'zh' ? 'AFTERSHE 视频艺术厂牌' : 'AFTERSHE Video Art Studio'}
+                {language === 'zh' ? 'AFTERSHE 视频艺术团队' : 'AFTERSHE Video Art Team'}
               </h3>
-              <p className="font-sans text-sm md:text-base text-neutral-400 leading-relaxed">
+              <p className="font-sans text-sm md:text-base text-neutral-450 leading-relaxed">
                 {language === 'zh' 
-                  ? '我作为早期骨干加入了初创 AI 视频团队 AFTERSHE。我们专注于探索生成式 AI 视频与电影质感的深度融合，设计商业广告及先驱影像作品。欢迎访问我们的两个官方阵地：'
-                  : 'I joined a pioneering creative vanguard called Aftershe, delivering generative cinematic outputs, brand campaigns, and visual-synthesis templates. Visit our core assets here:'
+                  ? '我作为早期成员（实习生）加入了初创 AI 视频团队 AFTERSHE。团队专注于探索生成式 AI 视频与电影质感的深度融合，设计商业广告及先驱影像作品。欢迎访问我们的两个官方阵地：'
+                  : 'I joined the startup AI video team AFTERSHE as an early member (intern). The team focuses on exploring the deep integration of generative AI video with cinematic textures, designing commercial advertisements and pioneering visual works. Welcome to visit our two official channels:'
                 }
               </p>
             </div>
