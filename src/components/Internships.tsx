@@ -86,21 +86,11 @@ export default function Internships({ language, selectedSkillId }: InternshipsPr
                           key={ptIdx}
                           className={`p-4 sm:p-5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden shadow-sm
                             ${isHighlighted 
-                              ? 'border-emerald-500/40 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.03] shadow-md shadow-emerald-500/5 translate-x-2'
+                              ? 'border-emerald-500/50 bg-white/95 dark:bg-[#1e1e1e]/50 shadow-md shadow-emerald-500/5'
                               : 'border-neutral-200/95 dark:border-neutral-800/90 bg-white/95 dark:bg-[#1e1e1e]/40 hover:border-emerald-500/30 dark:hover:border-emerald-500/20 hover:bg-white dark:hover:bg-[#1e1e1e]/60 hover:shadow-md'
                             }
                           `}
                         >
-                          {/* Top indicator ribbon if matched */}
-                          {isHighlighted && matchedSkillObj && (
-                            <div className="flex items-center gap-1.5 mb-2.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold">
-                                {language === 'zh' ? `匹配核心技能: ${matchedSkillObj.name.zh}` : `Matched Skill: ${matchedSkillObj.name.en}`}
-                              </span>
-                            </div>
-                          )}
-
                           <div className="flex items-start gap-3.5">
                             <span className={`text-xs font-mono font-bold mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors
                               ${isHighlighted 
@@ -110,9 +100,20 @@ export default function Internships({ language, selectedSkillId }: InternshipsPr
                             `}>
                               {ptIdx + 1}
                             </span>
-                            <p className="font-sans text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
-                              {language === 'zh' ? point.zh : point.en}
-                            </p>
+                            <div className="flex-1 space-y-1.5">
+                              {/* Discrete Skill Dot indicator */}
+                              {isHighlighted && matchedSkillObj && (
+                                <div className="flex items-center gap-1.5 opacity-90">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span className="text-[9px] font-mono uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-bold">
+                                    {language === 'zh' ? `匹配: ${matchedSkillObj.name.zh}` : `Matched: ${matchedSkillObj.name.en}`}
+                                  </span>
+                                </div>
+                              )}
+                              <p className="font-sans text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed">
+                                {language === 'zh' ? point.zh : point.en}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       );
