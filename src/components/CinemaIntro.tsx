@@ -92,6 +92,7 @@ function removeLocalVideoBlob(key: string): Promise<void> {
 // Fallbacks which are CDN-based, highly optimized, and globally unblocked
 const DEFAULT_OPENING = 'https://vjs.zencdn.net/v/oceans.mp4';
 const DEFAULT_LOOPING = 'https://www.w3schools.com/html/movie.mp4';
+const DEFAULT_AUDIO = 'https://assets.mixkit.co/music/preview/mixkit-serene-view-1017.mp3';
 
 export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
   const [phase, setPhase] = useState<'opening' | 'looping'>('opening');
@@ -99,17 +100,21 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
 
-  // States for video URLs
+  // States for video URLs and custom audio soundtrack
   const [openingVideo, setOpeningVideo] = useState<string>(DEFAULT_OPENING);
   const [loopingVideo, setLoopingVideo] = useState<string>(DEFAULT_LOOPING);
+  const [customAudio, setCustomAudio] = useState<string>(DEFAULT_AUDIO);
+  
   const [hasCustomOpening, setHasCustomOpening] = useState<boolean>(false);
   const [hasCustomLooping, setHasCustomLooping] = useState<boolean>(false);
+  const [hasCustomAudio, setHasCustomAudio] = useState<boolean>(false);
 
   const openingRef = useRef<HTMLVideoElement>(null);
   const loopingRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load videos from IndexedDB or Fallbacks on mount
+  // Load videos and audio from IndexedDB or Fallbacks on mount
   useEffect(() => {
     let active = true;
     const fetchStoredAssets = async () => {
@@ -123,6 +128,11 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
         setLoopingVideo(lpUrl);
         setHasCustomLooping(true);
       }
+      const audUrl = await getLocalVideoURL('cinema_custom_audio');
+      if (audUrl && active) {
+        setCustomAudio(audUrl);
+        setHasCustomAudio(true);
+      }
     };
     fetchStoredAssets();
     return () => {
@@ -130,31 +140,48 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
     };
   }, []);
 
-  // Programmatic Autoplay Triggers
+  // Programmatic Autoplay Triggers for silent videos to fit background soundtrack
   useEffect(() => {
     const playCurrentVideo = async () => {
       if (phase === 'opening') {
         if (openingRef.current) {
           try {
-            openingRef.current.muted = isMuted;
+            openingRef.current.muted = true;
             await openingRef.current.play();
           } catch (e) {
-            console.log('Opening autoplay blocked/deferred:', e);
+            console.log('Opening autoplay deferred:', e);
           }
         }
       } else {
         if (loopingRef.current) {
           try {
-            loopingRef.current.muted = isMuted;
+            loopingRef.current.muted = true;
             await loopingRef.current.play();
           } catch (e) {
-            console.log('Looping autoplay blocked/deferred:', e);
+            console.log('Looping autoplay deferred:', e);
           }
         }
       }
     };
     playCurrentVideo();
-  }, [phase, openingVideo, loopingVideo, isMuted]);
+  }, [phase, openingVideo, loopingVideo]);
+
+  // Programmatic Soundtrack playback synced with Mute state
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = isMuted;
+      if (!isMuted) {
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((e) => {
+            console.log('Soundtrack autoplay deferred/blocked by browser sandboxing:', e);
+          });
+        }
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [isMuted, customAudio, phase]);
 
   // Phase 1: Opening 4-second cinematic sequence
   useEffect(() => {
@@ -287,13 +314,35 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
     }
   };
 
+  // Upload Audio soundtrack handler (MP3/WAV storage in IndexedDB)
+  const handleUploadAudio = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        await storeLocalVideoBlob('cinema_custom_audio', file);
+        const objectUrl = URL.createObjectURL(file);
+        setCustomAudio(objectUrl);
+        setHasCustomAudio(true);
+      } catch (err) {
+        console.error('Failed to store high-fidelity audio in browser database:', err);
+        alert(language === 'zh'
+          ? '音频存储失败，建议上传 10MB 以内的音频文件 (MP3/WAV)。'
+          : 'Audio upload failed, please try a smaller MP3 or WAV file (under 10MB).'
+        );
+      }
+    }
+  };
+
   const resetVideosToDefault = async () => {
     await removeLocalVideoBlob('cinema_opening_video');
     await removeLocalVideoBlob('cinema_looping_video');
+    await removeLocalVideoBlob('cinema_custom_audio');
     setOpeningVideo(DEFAULT_OPENING);
     setLoopingVideo(DEFAULT_LOOPING);
+    setCustomAudio(DEFAULT_AUDIO);
     setHasCustomOpening(false);
     setHasCustomLooping(false);
+    setHasCustomAudio(false);
   };
 
   return (
@@ -305,6 +354,13 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
           transition={{ duration: 0.8, ease: 'easeInOut' }}
           className="fixed inset-0 z-50 bg-[#0a0a0a] text-white overflow-hidden flex flex-col justify-between items-stretch select-none"
         >
+          {/* Ambient Soundtrack layer with automatic looping and volume syncing */}
+          <audio
+            ref={audioRef}
+            src={customAudio}
+            loop
+            playsInline
+          />
           {/* Real-time Generative Background Canvas: Prevents empty black space 100% of the time */}
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-80" />
 
@@ -439,11 +495,6 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                       <Keyboard className="w-4 h-4 animate-bounce text-emerald-400" />
                       <span>{language === 'zh' ? '点击此处 或 敲击任意键进入' : 'PRESS ANY KEY OR TAP DISPLAY TO ENTER'}</span>
                     </div>
-                    <span className="font-sans text-[11px] text-neutral-450 leading-relaxed font-light">
-                      {language === 'zh'
-                        ? '首篇放映结束。在第二个视频中，您可选择右上方齿轮，上传您在附件中准备的 4s 第一视频与个人循环代表作进行展示！'
-                        : 'First reel completed. Feel free to use the gear icon upper right to upload and preview custom clips!'}
-                    </span>
                   </motion.div>
                 </motion.div>
               )}
@@ -514,6 +565,26 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                         type="file"
                         accept="video/mp4,video/quicktime,video/webm"
                         onChange={(e) => handleUploadVideo(e, 'looping')}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Upload 3: Custom Soundtrack/Background Music */}
+                  <div className="space-y-2">
+                    <label className="font-mono text-[9px] uppercase text-neutral-450 tracking-wider flex justify-between items-center">
+                      <span>{language === 'zh' ? '第三幕 • 独立背景音乐 / 电影配乐 (MP3/WAV)' : 'ACT 3 • CUSTOM BACKGROUND SOUNDTRACK (MP3/WAV)'}</span>
+                      {hasCustomAudio && <span className="text-emerald-400 font-bold">● {language === 'zh' ? '已缓存' : 'STORED'}</span>}
+                    </label>
+                    <label className="flex items-center justify-between text-xs px-3.5 py-3.5 bg-neutral-900 border border-neutral-850 hover:border-emerald-500/40 rounded-xl transition-all cursor-pointer text-neutral-300">
+                      <span className="truncate max-w-[240px] font-mono text-[11px] text-neutral-400">
+                        {hasCustomAudio ? '✓ custom_ambient_soundtrack.mp3' : 'default_cinematic_piano.mp3'}
+                      </span>
+                      <Upload className="w-4 h-4 text-neutral-500" />
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => handleUploadAudio(e)}
                         className="hidden"
                       />
                     </label>
