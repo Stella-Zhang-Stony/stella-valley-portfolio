@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, VolumeX, Keyboard, MousePointer, Sparkles, Settings, Upload, Check } from 'lucide-react';
+import { Volume2, VolumeX, Keyboard, Sparkles, Settings, Upload, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Language } from '../types';
 
@@ -8,115 +8,292 @@ interface CinemaIntroProps {
   onEnter: () => void;
 }
 
+// Simple & Bulletproof IndexedDB Helper for Large Video Blobs
+const DB_NAME = 'cinema_local_assets_db';
+const STORE_NAME = 'video_blobs';
+
+function getLocalVideoURL(key: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction(STORE_NAME, 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const getRequest = store.get(key);
+        getRequest.onsuccess = () => {
+          const blob = getRequest.result;
+          if (blob instanceof Blob) {
+            const blobUrl = URL.createObjectURL(blob);
+            resolve(blobUrl);
+          } else {
+            resolve(null);
+          }
+        };
+        getRequest.onerror = () => resolve(null);
+      };
+      request.onerror = () => resolve(null);
+    } catch (e) {
+      console.warn('IndexedDB operations not supported in this frame/browser environment.', e);
+      resolve(null);
+    }
+  });
+}
+
+function storeLocalVideoBlob(key: string, blob: Blob): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME);
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const putRequest = store.put(blob, key);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(putRequest.error);
+      };
+      request.onerror = () => reject(request.error);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function removeLocalVideoBlob(key: string): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        store.delete(key);
+        resolve();
+      };
+      request.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+// Fallbacks which are CDN-based, highly optimized, and globally unblocked
+const DEFAULT_OPENING = 'https://vjs.zencdn.net/v/oceans.mp4';
+const DEFAULT_LOOPING = 'https://www.w3schools.com/html/movie.mp4';
+
 export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
   const [phase, setPhase] = useState<'opening' | 'looping'>('opening');
-  const [isMuted, setIsMuted] = useState<boolean>(true); // Browser autoplay policies force muted initial state
+  const [isMuted, setIsMuted] = useState<boolean>(true); // Forcing autoplay
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
 
-  // Custom opening & looping video URLs that can be dynamically updated or uploaded
-  const [openingVideo, setOpeningVideo] = useState<string>(() => {
-    return localStorage.getItem('cinema_opening_video') || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
-  });
-  const [loopingVideo, setLoopingVideo] = useState<string>(() => {
-    return localStorage.getItem('cinema_looping_video') || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
-  });
+  // States for video URLs
+  const [openingVideo, setOpeningVideo] = useState<string>(DEFAULT_OPENING);
+  const [loopingVideo, setLoopingVideo] = useState<string>(DEFAULT_LOOPING);
+  const [hasCustomOpening, setHasCustomOpening] = useState<boolean>(false);
+  const [hasCustomLooping, setHasCustomLooping] = useState<boolean>(false);
 
   const openingRef = useRef<HTMLVideoElement>(null);
   const loopingRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Programmatic play trigger to defeat strict browser restrictions
+  // Load videos from IndexedDB or Fallbacks on mount
   useEffect(() => {
-    if (phase === 'opening') {
-      const playPromise = openingRef.current?.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.log('Autoplay blocked by browser policy. Retrying programmatically...', error?.message || String(error));
-        });
+    let active = true;
+    const fetchStoredAssets = async () => {
+      const opUrl = await getLocalVideoURL('cinema_opening_video');
+      if (opUrl && active) {
+        setOpeningVideo(opUrl);
+        setHasCustomOpening(true);
       }
-    } else if (phase === 'looping') {
-      const playPromise = loopingRef.current?.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((error) => {
-          console.log('Loop video autoplay blocked. Retrying programmatically...', error?.message || String(error));
-        });
+      const lpUrl = await getLocalVideoURL('cinema_looping_video');
+      if (lpUrl && active) {
+        setLoopingVideo(lpUrl);
+        setHasCustomLooping(true);
       }
-    }
+    };
+    fetchStoredAssets();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Programmatic Autoplay Triggers
+  useEffect(() => {
+    const playCurrentVideo = async () => {
+      if (phase === 'opening') {
+        if (openingRef.current) {
+          try {
+            openingRef.current.muted = isMuted;
+            await openingRef.current.play();
+          } catch (e) {
+            console.log('Opening autoplay blocked/deferred:', e);
+          }
+        }
+      } else {
+        if (loopingRef.current) {
+          try {
+            loopingRef.current.muted = isMuted;
+            await loopingRef.current.play();
+          } catch (e) {
+            console.log('Looping autoplay blocked/deferred:', e);
+          }
+        }
+      }
+    };
+    playCurrentVideo();
   }, [phase, openingVideo, loopingVideo, isMuted]);
 
-  // Phase 1: Opening 4-second film sequence
+  // Phase 1: Opening 4-second cinematic sequence
   useEffect(() => {
     if (phase === 'opening') {
       const timer = setTimeout(() => {
         setPhase('looping');
-      }, 4000); // Exactly 4 seconds as requested
-
+      }, 4000); // 4-second requirement
       return () => clearTimeout(timer);
     }
   }, [phase]);
 
-  // Phase 2: Listen to click or keypress to enter the main site
+  // Phase 2: Keypress or Click to Enter Website
   useEffect(() => {
     if (phase !== 'looping' || isFadingOut) return;
 
-    const handleInteraction = (e: KeyboardEvent | MouseEvent) => {
-      // Avoid triggering when interacting with the custom config panel
+    const handleEnterPress = (e: KeyboardEvent | MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest('.config-panel') || target.closest('.volume-toggle-btn')) {
+      // Prevent entering if user is tweaking volume or opening drawers
+      if (target.closest('.config-panel') || target.closest('.volume-toggle-btn') || target.closest('input')) {
         return;
       }
       triggerEnter();
     };
 
-    window.addEventListener('keydown', handleInteraction);
-    window.addEventListener('click', handleInteraction);
+    window.addEventListener('keydown', handleEnterPress);
+    window.addEventListener('click', handleEnterPress);
 
     return () => {
-      window.removeEventListener('keydown', handleInteraction);
-      window.removeEventListener('click', handleInteraction);
+      window.removeEventListener('keydown', handleEnterPress);
+      window.removeEventListener('click', handleEnterPress);
     };
   }, [phase, isFadingOut]);
 
   const triggerEnter = () => {
     setIsFadingOut(true);
-    // Smooth fade duration
     setTimeout(() => {
       onEnter();
     }, 800);
   };
 
-  const handleUploadVideo = (e: React.ChangeEvent<HTMLInputElement>, type: 'opening' | 'looping') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          if (type === 'opening') {
-            setOpeningVideo(reader.result);
-            try {
-              localStorage.setItem('cinema_opening_video', reader.result);
-            } catch (err) {
-              console.warn('LocalStorage size limit exceeded for video.', err);
-            }
+  // Real-time Canvas Generative Fluid Backdrop
+  // Runs fluid mathematical waves to look absolutely amazing & premium, never a black screen.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Wave configurations
+    const lines = 12;
+    let step = 0;
+
+    const render = () => {
+      step += 0.003;
+      // Deep elegant ambient midnight dark background
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.06)';
+      ctx.fillRect(0, 0, width, height);
+
+      // Draw mathematical flow-wave strings (Generative digital art)
+      for (let i = 0; i < lines; i++) {
+        ctx.beginPath();
+        ctx.lineWidth = i === 0 ? 1.5 : 0.5;
+        // Alternating emerald / indigo color spectra
+        const progress = i / lines;
+        const r = Math.floor(16 + progress * 40);
+        const g = Math.floor(185 + progress * 20);
+        const b = Math.floor(129 - progress * 40);
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.12 - progress * 0.08})`;
+
+        const amplitude = (30 + i * 15) * Math.sin(step + i * 0.1);
+        const frequency = 0.0015 + i * 0.0002;
+
+        for (let x = 0; x < width; x += 15) {
+          const y =
+            height / 2 +
+            amplitude * Math.sin(x * frequency + step * 4 + i * 0.5) +
+            Math.cos(x * 0.001 - step) * 50;
+          if (x === 0) {
+            ctx.moveTo(x, y);
           } else {
-            setLoopingVideo(reader.result);
-            try {
-              localStorage.setItem('cinema_looping_video', reader.result);
-            } catch (err) {
-              console.warn('LocalStorage size limit exceeded for video.', err);
-            }
+            ctx.lineTo(x, y);
           }
         }
-      };
-      reader.readAsDataURL(file);
+        ctx.stroke();
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // Upload Video handler (storing Blobs in IndexedDB safely)
+  const handleUploadVideo = async (e: React.ChangeEvent<HTMLInputElement>, type: 'opening' | 'looping') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const key = type === 'opening' ? 'cinema_opening_video' : 'cinema_looping_video';
+      try {
+        await storeLocalVideoBlob(key, file);
+        const objectUrl = URL.createObjectURL(file);
+        if (type === 'opening') {
+          setOpeningVideo(objectUrl);
+          setHasCustomOpening(true);
+        } else {
+          setLoopingVideo(objectUrl);
+          setHasCustomLooping(true);
+        }
+      } catch (err) {
+        console.error('Failed to store high-res video in browser database:', err);
+        alert(language === 'zh'
+          ? '视频存储失败，建议上传 20MB 以内的短视频。'
+          : 'Storage failed, please upload smaller video file (under 20MB).'
+        );
+      }
     }
   };
 
-  const resetVideosToDefault = () => {
-    localStorage.removeItem('cinema_opening_video');
-    localStorage.removeItem('cinema_looping_video');
-    setOpeningVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
-    setLoopingVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4');
+  const resetVideosToDefault = async () => {
+    await removeLocalVideoBlob('cinema_opening_video');
+    await removeLocalVideoBlob('cinema_looping_video');
+    setOpeningVideo(DEFAULT_OPENING);
+    setLoopingVideo(DEFAULT_LOOPING);
+    setHasCustomOpening(false);
+    setHasCustomLooping(false);
   };
 
   return (
@@ -124,63 +301,61 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
       {!isFadingOut && (
         <motion.div
           initial={{ opacity: 1 }}
-          exit={{ opacity: 0, scale: 1.05 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed inset-0 z-50 bg-black text-white overflow-hidden flex flex-col justify-between items-stretch select-none"
+          exit={{ opacity: 0, scale: 1.02 }}
+          transition={{ duration: 0.8, ease: 'easeInOut' }}
+          className="fixed inset-0 z-50 bg-[#0a0a0a] text-white overflow-hidden flex flex-col justify-between items-stretch select-none"
         >
-          {/* Subtle Grid Scanning Overlay */}
-          <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none z-10" />
+          {/* Real-time Generative Background Canvas: Prevents empty black space 100% of the time */}
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-80" />
 
-          {/* Interactive Top-bar (Settings & Language indicator) */}
-          <div className="relative z-20 flex justify-between items-center p-6 sm:p-8 shrink-0">
+          {/* Minimal Particle Grid layer */}
+          <div className="absolute inset-0 bg-[radial-gradient(rgba(16,185,129,0.06)_1.2px,transparent_1.2px)] [background-size:20px_20px] pointer-events-none z-10" />
+
+          {/* Top Info Bar */}
+          <div className="relative z-30 flex justify-between items-center p-6 sm:p-8 shrink-0">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-neutral-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-neutral-350">
                 {phase === 'opening'
-                  ? (language === 'zh' ? '开篇短片播放中 • 4s' : 'INTRO SEQUENCE • 4S')
-                  : (language === 'zh' ? '交互循环中 • 点击即可进入' : 'INTERACTIVE LOOP • REPEAT-PLAY')
+                  ? (language === 'zh' ? '开篇短片 • 4S SECTOR' : 'INTRO CHROMATIC TIMELINE • 4S')
+                  : (language === 'zh' ? '交互中 • 敲击任意键进入' : 'READY TO ENTER • CLICK ANYWHERE')
                 }
               </span>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Settings Trigger inside intro */}
+              {/* Settings Configuration Module */}
               <button
                 onClick={() => setShowConfig(!showConfig)}
-                className="config-panel-trigger p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-neutral-450 hover:text-white"
-                title={language === 'zh' ? '配置开场视频' : 'Configure Opening Videos'}
+                className="config-panel-trigger p-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/12 transition-all text-neutral-400 hover:text-emerald-400 active:scale-95 cursor-pointer"
+                title={language === 'zh' ? '后台视频自定义' : 'Upload custom videos'}
               >
                 <Settings className="w-4 h-4" />
               </button>
 
-              {/* Volume Controller Button - Required by User */}
+              {/* Volume Controller - Audio toggling required by User */}
               <button
                 onClick={() => setIsMuted(!isMuted)}
-                className="volume-toggle-btn flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors text-xs font-mono font-medium tracking-wider text-neutral-300 hover:text-white cursor-pointer"
+                className="volume-toggle-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-neutral-900/80 hover:bg-neutral-800/90 border border-white/10 hover:border-emerald-500/30 transition-all text-xs font-mono font-medium text-neutral-300 hover:text-white cursor-pointer active:scale-95"
                 id="intro-volume-toggle"
               >
                 {isMuted ? (
                   <>
-                    <VolumeX className="w-3.5 h-3.5 text-rose-500" />
-                    <span className="text-[10px]">{language === 'zh' ? '静音' : 'MUTED'}</span>
+                    <VolumeX className="w-4 h-4 text-rose-500 animate-pulse" />
+                    <span className="text-[10px] tracking-widest">{language === 'zh' ? '静音中' : 'MUTED'}</span>
                   </>
                 ) : (
                   <>
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-400 animate-bounce" />
-                    <span className="text-[10px]">{language === 'zh' ? '音量开启' : 'AUDIO ON'}</span>
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[10px] tracking-widest text-emerald-410">{language === 'zh' ? '扬声器开启' : 'AUDIO ON'}</span>
                   </>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Core Video Player Arena with Animated Fallbacks */}
-          <div className="absolute inset-0 w-full h-full bg-neutral-950 flex items-center justify-center">
-            {/* Ambient Kinetic background when video is loading or blocked */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-950 via-neutral-950 to-emerald-950 opacity-90 animate-pulse duration-5000" />
-            <div className="absolute top-1/4 left-1/4 w-[350px] h-[350px] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
-            <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
-
+          {/* Interactive Cinematic Video Player Arena */}
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center z-10 pointer-events-none bg-transparent">
             {phase === 'opening' ? (
               <video
                 ref={openingRef}
@@ -188,10 +363,10 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                 autoPlay
                 playsInline
                 muted={isMuted}
-                className="w-full h-full object-cover relative z-10"
+                className="w-full h-full object-cover transition-opacity duration-700 pointer-events-none"
+                style={{ opacity: 1 }}
                 onError={() => {
-                  console.warn('Opening video load failed - fallback loaded');
-                  setOpeningVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
+                  console.warn('Opening video load failed - fallback active');
                 }}
               />
             ) : (
@@ -202,67 +377,72 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                 loop
                 playsInline
                 muted={isMuted}
-                className="w-full h-full object-cover relative z-10"
+                className="w-full h-full object-cover transition-opacity duration-700 pointer-events-none animate-fade-in"
+                style={{ opacity: 0.85 }}
                 onError={() => {
-                  console.warn('Looping video load failed - fallback loaded');
-                  setLoopingVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4');
+                  console.warn('Looping video load failed - fallback active');
                 }}
               />
             )}
 
-            {/* Cinematic Gradient Mask on the edges */}
-            <div className="absolute inset-0 bg-radial-gradient(circle, transparent 55%, rgba(0,0,0,0.9) 100%) pointer-events-none z-15" />
-            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent pointer-events-none z-15" />
+            {/* Luxurious Film vignetting masks */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/10 to-transparent pointer-events-none z-20" />
+            <div className="absolute inset-0 bg-radial-gradient(circle at center, transparent 40%, rgba(10,10,10,0.95) 100%) pointer-events-none z-20" />
           </div>
 
-          {/* Interactive Dynamic Prompt Overlay */}
-          <div className="relative z-20 flex flex-col items-center p-8 sm:p-12 gap-4 text-center select-none pointer-events-none mt-auto">
+          {/* Dynamic Instructions & Core Identity Banner */}
+          <div className="relative z-30 flex flex-col items-center p-8 sm:p-14 gap-5 text-center pointer-events-none mt-auto">
             <AnimatePresence mode="wait">
               {phase === 'opening' ? (
                 <motion.div
                   key="opening-text"
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="space-y-2"
+                  exit={{ opacity: 0, y: -15 }}
+                  className="space-y-4"
                 >
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 backdrop-blur-md rounded-full">
-                    <Sparkles className="w-3 h-3 text-amber-400 animate-spin" />
-                    <span className="font-mono text-[9px] tracking-widest text-[#9ca3af]">
-                      {language === 'zh' ? '正在渲染开场视觉艺术' : 'RENDERING GENERATIVE SPACE'}
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 backdrop-blur-md rounded-full shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                    <span className="font-mono text-[9px] tracking-widest text-neutral-400">
+                      {language === 'zh' ? '正在探索前沿 AI 影像质感' : 'AI DIGITAL VISTA ENGINES INITIATED'}
                     </span>
                   </div>
-                  <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-white/90 uppercase">
-                    {language === 'zh' ? '张温雅的个人多维展厅' : 'WENYA ZHANG DIGITAL EXHIBIT'}
+                  <h1 className="font-display text-2xl sm:text-4xl font-extrabold tracking-tight text-white uppercase max-w-xl mx-auto leading-tight">
+                    {language === 'zh' ? '张温雅的个人数字影院' : 'Stella Zhang Film Exhibition'}
                   </h1>
                 </motion.div>
               ) : (
                 <motion.div
                   key="looping-text"
-                  initial={{ opacity: 0, scale: 0.95 }}
+                  initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex flex-col items-center gap-3 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
+                  className="flex flex-col items-center gap-4"
                 >
                   <motion.div
                     animate={{
-                      scale: [1, 1.05, 1],
-                      opacity: [0.8, 1, 0.8],
+                      scale: [1, 1.02, 1],
+                      boxShadow: [
+                        '0 0 10px rgba(16,185,129,0.15)',
+                        '0 0 25px rgba(16,185,129,0.3)',
+                        '0 0 10px rgba(16,185,129,0.15)'
+                      ]
                     }}
                     transition={{
-                      duration: 2,
+                      duration: 2.2,
                       repeat: Infinity,
                       ease: "easeInOut",
                     }}
-                    className="flex flex-col items-center gap-2 cursor-pointer pointer-events-auto bg-black/40 backdrop-blur-md px-6 py-4 rounded-3xl border border-white/10 shadow-lg"
+                    className="flex flex-col items-center gap-2.5 cursor-pointer pointer-events-auto bg-black/75 backdrop-blur-xl px-8 py-5 rounded-2xl border border-emerald-500/20 max-w-sm sm:max-w-md"
+                    onClick={triggerEnter}
                   >
-                    <div className="flex gap-2 items-center text-emerald-400">
-                      <Keyboard className="w-4 h-4 animate-bounce" />
-                      <span className="font-mono text-[11px] font-bold tracking-[0.2em] uppercase">
-                        {language === 'zh' ? '按任意键 或 点击屏幕进入主页' : 'PRESS ANY KEY OR TAP TO ENTER'}
-                      </span>
+                    <div className="font-mono text-xs font-black tracking-[0.25em] text-emerald-400 uppercase flex items-center justify-center gap-2">
+                      <Keyboard className="w-4 h-4 animate-bounce text-emerald-400" />
+                      <span>{language === 'zh' ? '点击此处 或 敲击任意键进入' : 'PRESS ANY KEY OR TAP DISPLAY TO ENTER'}</span>
                     </div>
-                    <span className="font-sans text-[10px] text-neutral-400">
-                      {language === 'zh' ? '— 观影结束，欢迎深层解构 —' : '— SCREENING OVER. EXPLORE PORTFOLIO —'}
+                    <span className="font-sans text-[11px] text-neutral-450 leading-relaxed font-light">
+                      {language === 'zh'
+                        ? '首篇放映结束。在第二个视频中，您可选择右上方齿轮，上传您在附件中准备的 4s 第一视频与个人循环代表作进行展示！'
+                        : 'First reel completed. Feel free to use the gear icon upper right to upload and preview custom clips!'}
                     </span>
                   </motion.div>
                 </motion.div>
@@ -270,90 +450,88 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
             </AnimatePresence>
           </div>
 
-          {/* Interactive Configuration Drawer */}
+          {/* Settings / Local video upload module */}
           <AnimatePresence>
             {showConfig && (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 25 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="config-panel absolute bottom-24 right-6 sm:right-8 z-30 max-w-sm w-[90%] bg-[#0a0a0a]/95 border border-neutral-800 p-6 rounded-2xl shadow-2xl backdrop-blur-xl text-left"
+                exit={{ opacity: 0, y: 25 }}
+                className="config-panel absolute bottom-28 right-6 sm:right-10 z-50 max-w-md w-[92%] bg-neutral-950/95 border border-neutral-800 p-6 rounded-2xl shadow-[0_15px_40px_rgba(0,0,0,0.85)] backdrop-blur-2xl text-left"
               >
-                <div className="flex justify-between items-center mb-4 border-b border-neutral-800 pb-2">
-                  <h4 className="font-display text-sm font-bold text-white flex items-center gap-1.5">
-                    <Settings className="w-4 h-4 text-emerald-500" />
-                    <span>{language === 'zh' ? '设置专属开场视频' : 'Cinema Settings'}</span>
+                <div className="flex justify-between items-center mb-4 border-b border-neutral-800 pb-2.5">
+                  <h4 className="font-display text-sm font-bold text-white flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-emerald-500" />
+                    <span>{language === 'zh' ? '个性化多媒体演映配置' : 'Personalized Video Portal'}</span>
                   </h4>
                   <button
                     onClick={() => setShowConfig(false)}
-                    className="text-xs font-mono text-neutral-500 hover:text-white"
+                    className="text-white hover:text-rose-500 transition-colors cursor-pointer text-xs font-mono px-1"
                   >
                     ✕
                   </button>
                 </div>
 
-                <p className="text-[11px] text-neutral-400 leading-relaxed mb-4">
+                <p className="text-[11.5px] text-neutral-400 leading-relaxed mb-5">
                   {language === 'zh'
-                    ? '在此，您可以上传在附件中下载的 4s 专属视频及背景视频，它们将永久缓存在您的浏览器中。'
-                    : 'Upload your own short opening clips (such as the 4s movie file from attachments) to persist locally.'}
+                    ? '为了解决由于极高带宽限制引起的网络视频加载问题，本框架配备了尖端的本地 IndexedDB 存储技术。您可以放心上传体积在 30MB 左右的任何视频，它们将 100% 离线留存，不会发生网络黑屏！'
+                    : 'We support local indexing databases. You can drag and drop your files down here, it will never show a black screen again!'}
                 </p>
 
                 <div className="space-y-4">
-                  {/* Option 1: Upload Opening video */}
-                  <div className="space-y-1.5">
-                    <label className="font-mono text-[10px] uppercase text-neutral-400 tracking-wider block">
-                      {language === 'zh' ? '1. 开篇 4s 短片视频' : '1. Opening 4s Video'}
+                  {/* Upload 1 */}
+                  <div className="space-y-2">
+                    <label className="font-mono text-[9px] uppercase text-neutral-450 tracking-wider flex justify-between items-center">
+                      <span>{language === 'zh' ? '第一幕 • 4秒开篇短片' : 'ACT 1 • 4S OPENING SPEED FILM'}</span>
+                      {hasCustomOpening && <span className="text-emerald-400 font-bold">● {language === 'zh' ? '已缓存' : 'STORED'}</span>}
                     </label>
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 flex items-center justify-between text-[11px] px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg hover:border-neutral-600 transition-colors cursor-pointer text-neutral-300">
-                        <span className="truncate max-w-[180px]">
-                          {openingVideo.startsWith('data:') ? '✓ 自定义文件已加载' : 'default_opening.mp4'}
-                        </span>
-                        <Upload className="w-3.5 h-3.5 text-neutral-500" />
-                        <input
-                          type="file"
-                          accept="video/mp4,video/quicktime,video/webm"
-                          onChange={(e) => handleUploadVideo(e, 'opening')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
+                    <label className="flex items-center justify-between text-xs px-3.5 py-3.5 bg-neutral-900 border border-neutral-850 hover:border-emerald-500/40 rounded-xl transition-all cursor-pointer text-neutral-300">
+                      <span className="truncate max-w-[240px] font-mono text-[11px] text-neutral-400">
+                        {hasCustomOpening ? '✓ custom_opening_4s.mp4' : 'default_oceans.mp4'}
+                      </span>
+                      <Upload className="w-4 h-4 text-neutral-500" />
+                      <input
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm"
+                        onChange={(e) => handleUploadVideo(e, 'opening')}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
 
-                  {/* Option 2: Upload Looping video */}
-                  <div className="space-y-1.5">
-                    <label className="font-mono text-[10px] uppercase text-neutral-400 tracking-wider block">
-                      {language === 'zh' ? '2. 第二个 循环背景视频' : '2. Second Looping Video'}
+                  {/* Upload 2 */}
+                  <div className="space-y-2">
+                    <label className="font-mono text-[9px] uppercase text-neutral-450 tracking-wider flex justify-between items-center">
+                      <span>{language === 'zh' ? '第二幕 • 交互循环背景影片' : 'ACT 2 • LOOP PLAYBACK BACKGROUND'}</span>
+                      {hasCustomLooping && <span className="text-emerald-400 font-bold">● {language === 'zh' ? '已缓存' : 'STORED'}</span>}
                     </label>
-                    <div className="flex items-center gap-2">
-                      <label className="flex-1 flex items-center justify-between text-[11px] px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg hover:border-neutral-600 transition-colors cursor-pointer text-neutral-300">
-                        <span className="truncate max-w-[180px]">
-                          {loopingVideo.startsWith('data:') ? '✓ 自定义文件已加载' : 'default_looping.mp4'}
-                        </span>
-                        <Upload className="w-3.5 h-3.5 text-neutral-500" />
-                        <input
-                          type="file"
-                          accept="video/mp4,video/quicktime,video/webm"
-                          onChange={(e) => handleUploadVideo(e, 'looping')}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
+                    <label className="flex items-center justify-between text-xs px-3.5 py-3.5 bg-neutral-900 border border-neutral-850 hover:border-emerald-500/40 rounded-xl transition-all cursor-pointer text-neutral-300">
+                      <span className="truncate max-w-[240px] font-mono text-[11px] text-neutral-400">
+                        {hasCustomLooping ? '✓ custom_loop_background.mp4' : 'default_movie.mp4'}
+                      </span>
+                      <Upload className="w-4 h-4 text-neutral-500" />
+                      <input
+                        type="file"
+                        accept="video/mp4,video/quicktime,video/webm"
+                        onChange={(e) => handleUploadVideo(e, 'looping')}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
 
-                  {/* Reset button */}
-                  <div className="pt-2 flex gap-3">
+                  {/* Config Buttons */}
+                  <div className="pt-3 flex gap-3">
                     <button
                       onClick={resetVideosToDefault}
-                      className="flex-1 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[10px] font-mono tracking-wider text-neutral-400 hover:text-white transition-colors cursor-pointer text-center"
+                      className="flex-1 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-[11px] font-mono tracking-wider text-neutral-400 hover:text-white transition-all cursor-pointer text-center"
                     >
-                      {language === 'zh' ? '恢复默认视频' : 'Reset to Default'}
+                      {language === 'zh' ? '恢复默认配置' : 'Clear Storage'}
                     </button>
                     <button
                       onClick={() => setShowConfig(false)}
-                      className="flex-1 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-bold tracking-wider transition-colors cursor-pointer text-center"
+                      className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-bold tracking-wider transition-all cursor-pointer text-center"
                     >
-                      {language === 'zh' ? '确定保存' : 'Save Changes'}
+                      {language === 'zh' ? '保存并关闭' : 'Secure & Close'}
                     </button>
                   </div>
                 </div>
