@@ -6,6 +6,10 @@ import { Language } from '../types';
 interface CinemaIntroProps {
   language: Language;
   onEnter: () => void;
+  isMuted: boolean;
+  setIsMuted: (muted: boolean) => void;
+  customAudio: string;
+  setCustomAudio: (src: string) => void;
 }
 
 // Simple & Bulletproof IndexedDB Helper for Large Video Blobs
@@ -94,16 +98,14 @@ const DEFAULT_OPENING = 'https://vjs.zencdn.net/v/oceans.mp4';
 const DEFAULT_LOOPING = 'https://www.w3schools.com/html/movie.mp4';
 const DEFAULT_AUDIO = 'https://assets.mixkit.co/music/preview/mixkit-serene-view-1017.mp3';
 
-export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
+export default function CinemaIntro({ language, onEnter, isMuted, setIsMuted, customAudio, setCustomAudio }: CinemaIntroProps) {
   const [phase, setPhase] = useState<'opening' | 'looping'>('opening');
-  const [isMuted, setIsMuted] = useState<boolean>(true); // Forcing autoplay
   const [showConfig, setShowConfig] = useState<boolean>(false);
   const [isFadingOut, setIsFadingOut] = useState<boolean>(false);
 
   // States for video URLs and custom audio soundtrack
   const [openingVideo, setOpeningVideo] = useState<string>(DEFAULT_OPENING);
   const [loopingVideo, setLoopingVideo] = useState<string>(DEFAULT_LOOPING);
-  const [customAudio, setCustomAudio] = useState<string>(DEFAULT_AUDIO);
   
   const [hasCustomOpening, setHasCustomOpening] = useState<boolean>(false);
   const [hasCustomLooping, setHasCustomLooping] = useState<boolean>(false);
@@ -111,10 +113,9 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
 
   const openingRef = useRef<HTMLVideoElement>(null);
   const loopingRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Load videos and audio from IndexedDB or Fallbacks on mount
+  // Load videos and audio status from IndexedDB or Fallbacks on mount
   useEffect(() => {
     let active = true;
     const fetchStoredAssets = async () => {
@@ -130,15 +131,16 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
       }
       const audUrl = await getLocalVideoURL('cinema_custom_audio');
       if (audUrl && active) {
-        setCustomAudio(audUrl);
         setHasCustomAudio(true);
+      } else if (active) {
+        setHasCustomAudio(false);
       }
     };
     fetchStoredAssets();
     return () => {
       active = false;
     };
-  }, []);
+  }, [customAudio]);
 
   // Programmatic Autoplay Triggers for silent videos to fit background soundtrack
   useEffect(() => {
@@ -165,23 +167,6 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
     };
     playCurrentVideo();
   }, [phase, openingVideo, loopingVideo]);
-
-  // Programmatic Soundtrack playback synced with Mute state
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = isMuted;
-      if (!isMuted) {
-        const playPromise = audioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((e) => {
-            console.log('Soundtrack autoplay deferred/blocked by browser sandboxing:', e);
-          });
-        }
-      } else {
-        audioRef.current.pause();
-      }
-    }
-  }, [isMuted, customAudio, phase]);
 
   // Phase 1: Opening 4-second cinematic sequence
   useEffect(() => {
@@ -354,13 +339,6 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
           transition={{ duration: 0.8, ease: 'easeInOut' }}
           className="fixed inset-0 z-50 bg-[#0a0a0a] text-white overflow-hidden flex flex-col justify-between items-stretch select-none"
         >
-          {/* Ambient Soundtrack layer with automatic looping and volume syncing */}
-          <audio
-            ref={audioRef}
-            src={customAudio}
-            loop
-            playsInline
-          />
           {/* Real-time Generative Background Canvas: Prevents empty black space 100% of the time */}
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-0 opacity-80" />
 

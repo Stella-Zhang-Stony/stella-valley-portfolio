@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Sun, Moon, Globe, Menu, X, Award, Briefcase, GraduationCap, Film, Phone } from 'lucide-react';
+import { Sun, Moon, Globe, Menu, X, Award, Briefcase, GraduationCap, Film, Phone, Volume2, VolumeX } from 'lucide-react';
 import { useState } from 'react';
 import { translations } from '../data';
 import { Language } from '../types';
@@ -9,9 +9,11 @@ interface NavigationProps {
   setLanguage: (lang: Language) => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  isMuted: boolean;
+  toggleMute: () => void;
 }
 
-export default function Navigation({ language, setLanguage, darkMode, toggleDarkMode }: NavigationProps) {
+export default function Navigation({ language, setLanguage, darkMode, toggleDarkMode, isMuted, toggleMute }: NavigationProps) {
   const t = translations[language];
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -56,6 +58,32 @@ export default function Navigation({ language, setLanguage, darkMode, toggleDark
 
         {/* Action Controls (Lang, Theme, Mobile Toggle) */}
         <div className="flex items-center gap-4">
+          {/* Global Soundtrack Controller */}
+          <button
+            onClick={toggleMute}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 text-xs font-semibold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800/80 transition-all cursor-pointer active:scale-95"
+            aria-label="Toggle soundtrack"
+            id="global-audio-toggle-btn"
+          >
+            {isMuted ? (
+              <>
+                <VolumeX className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                <span className="hidden sm:inline">{language === 'zh' ? '背景音乐：静音' : 'AUDIO: MUTED'}</span>
+                <span className="sm:hidden">{language === 'zh' ? '音效' : 'MUTE'}</span>
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold hidden sm:inline">
+                  {language === 'zh' ? '背景音乐：播放中' : 'AUDIO: PLAYING'}
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold sm:hidden">
+                  {language === 'zh' ? '放映' : 'ON'}
+                </span>
+              </>
+            )}
+          </button>
+
           {/* Language Switch */}
           <button
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
