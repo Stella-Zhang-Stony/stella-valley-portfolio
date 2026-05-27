@@ -84,10 +84,10 @@ export default function Internships({ language, selectedSkillId }: InternshipsPr
                       return (
                         <div
                           key={ptIdx}
-                          className={`p-4 rounded-xl border transition-all duration-500 text-left relative overflow-hidden
+                          className={`p-4 sm:p-5 rounded-xl border transition-all duration-300 text-left relative overflow-hidden shadow-sm
                             ${isHighlighted 
-                              ? 'border-emerald-500/40 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.03] shadow-inner shadow-emerald-500/5 translate-x-2'
-                              : 'border-transparent bg-transparent hover:bg-neutral-100/45 dark:hover:bg-neutral-900/10'
+                              ? 'border-emerald-500/40 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.03] shadow-md shadow-emerald-500/5 translate-x-2'
+                              : 'border-neutral-200/95 dark:border-neutral-800/90 bg-white/95 dark:bg-[#1e1e1e]/40 hover:border-emerald-500/30 dark:hover:border-emerald-500/20 hover:bg-white dark:hover:bg-[#1e1e1e]/60 hover:shadow-md'
                             }
                           `}
                         >
@@ -101,11 +101,11 @@ export default function Internships({ language, selectedSkillId }: InternshipsPr
                             </div>
                           )}
 
-                          <div className="flex items-start gap-3">
-                            <span className={`text-xs font-mono font-bold mt-1 shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors
+                          <div className="flex items-start gap-3.5">
+                            <span className={`text-xs font-mono font-bold mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors
                               ${isHighlighted 
                                 ? 'bg-emerald-500 text-white' 
-                                : 'bg-neutral-250 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400'
+                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 border border-neutral-200/30 dark:border-neutral-700/30'
                               }
                             `}>
                               {ptIdx + 1}
