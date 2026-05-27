@@ -54,7 +54,7 @@ export default function AIVideo({ language }: AIVideoProps) {
             {/* Visual Screen with Play Controls */}
             <div className="lg:col-span-7 relative group aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-850 shadow-inner">
               <img
-                src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200"
+                src="https://images.unsplash.com/photo-1502444330042-d1a1ddf9bb5b?q=80&w=1200"
                 alt="AI Short Film Poster Frame"
                 className="w-full h-full object-cover opacity-65 group-hover:scale-105 transition-transform duration-750"
               />
@@ -91,12 +91,12 @@ export default function AIVideo({ language }: AIVideoProps) {
                 {language === 'zh' ? '主打 AI 作品' : 'FEATURED FILM'}
               </span>
               <h3 className="font-display text-2xl font-bold text-white mb-4">
-                {language === 'zh' ? 'AI 概念短片：庄周梦蝶' : 'AI Concept Film: Butterfly Dreams'}
+                {language === 'zh' ? 'AI 概念短片：用喜鹊谋杀案的方式打开我的学校' : 'AI Concept Film: Opening My School in the Style of Magpie Murders'}
               </h3>
               <p className="font-sans text-sm text-neutral-450 leading-relaxed mb-6">
                 {language === 'zh' 
-                  ? '这是一次突破维度的数字尝试，运用前沿 AI 模型将水墨笔触、粒子流动与未来主义电子乐无缝串联。短片构筑了一个非线性的数字幻境，欢迎在我的微信视频号深度查看流媒体作品。'
-                  : 'A boundary-pushing synthetic artifact exploring lucid hallucinations and Chinese silk brush motifs over modular cybernetic soundscapes. Hosted securely on WeChat channels.'
+                  ? 'AI 概念短片：用喜鹊谋杀案的方式打开我的学校。这是一次将古典英伦悬疑美学与现代校园空间融合的先锋尝试，运用前沿 AI 生成模型重塑视觉张力，欢迎在我的微信视频号深度查看流媒体作品。'
+                  : 'An avant-garde visual-synthesis masterpiece that integrates classical suspenseful British aesthetics with modern university landscapes. Recreating cinematic narratives with cutting-edge generation pipelines.'
                 }
               </p>
 

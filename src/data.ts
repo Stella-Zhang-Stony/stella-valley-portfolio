@@ -357,14 +357,14 @@ export const skillsBubbles: SkillBubble[] = [
 export const aiVideoProjects: AIVideoProject[] = [
   {
     title: {
-      zh: '【AI 短片】 个人先锋艺术视频流',
-      en: '【AI Film】 Personal Avant-garde Short Film Showcase',
+      zh: '【AI 短片】以喜鹊谋杀案的方式打开我的学校',
+      en: '【AI Film】Opening My School in the Style of Magpie Murders',
     },
     desc: {
-      zh: '利用生成式视频模型，探索重力、粒子在梦境场景下的交互，实现惊艳的视听同步，欢迎在微信视频号观看。',
-      en: 'Exploring synthetic fluidity and granular simulations in lucid dreamscapes. Tailored with prompt chaining and ambient soundtracks.',
+      zh: '这是一次突破维度的数字尝试，将古典悬疑色彩的喜鹊拼贴概念，与现代校园空间影像完美串联。',
+      en: 'A suspenseful cinematic trailer blending contemporary university buildings with highly-stylized graphic motifs in a tribute to British noir.',
     },
-    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=640&auto=format&fit=crop',
+    imageUrl: 'https://images.unsplash.com/photo-1502444330042-d1a1ddf9bb5b?q=80&w=640&auto=format&fit=crop',
     link: 'https://weixin.qq.com/sph/AtTtPqEBN',
     type: 'wechat',
   },

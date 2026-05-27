@@ -13,12 +13,14 @@ export default function Hero({ language }: HeroProps) {
   const [time, setTime] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // States for custom GIF player
+  // States for custom GIF or Video player
   const [gifSrc, setGifSrc] = useState<string>(() => {
-    return localStorage.getItem('stella_hero_gif') || 'https://media.giphy.com/media/Y3vD6u8R6p8SgV9A77/giphy.gif';
+    return localStorage.getItem('stella_hero_gif') || 'https://assets.mixkit.co/videos/preview/mixkit-girl-dancing-alone-on-the-beach-at-sunset-22851-large.mp4';
   });
   const [gifPlaying, setGifPlaying] = useState<boolean>(true);
   const [progress, setProgress] = useState<number>(100);
+
+  const isVideo = gifSrc.startsWith('data:video/') || gifSrc.endsWith('.mp4') || gifSrc.endsWith('.webm') || gifSrc.endsWith('.mov') || gifSrc.includes('video');
 
   // Shanghai Ticking clock (UTC+8)
   useEffect(() => {
@@ -69,7 +71,11 @@ export default function Hero({ language }: HeroProps) {
       reader.onload = () => {
         if (typeof reader.result === 'string') {
           setGifSrc(reader.result);
-          localStorage.setItem('stella_hero_gif', reader.result);
+          try {
+            localStorage.setItem('stella_hero_gif', reader.result);
+          } catch (e) {
+            console.warn('LocalStorage quota exceeded. Safe fallback utilized.', e);
+          }
           setGifPlaying(true);
         }
       };
@@ -175,7 +181,7 @@ export default function Hero({ language }: HeroProps) {
               
               <AnimatePresence mode="wait">
                 {gifPlaying ? (
-                  // PLAYING STATE (Plays her uploaded GIF or high-end particle placeholder)
+                  // PLAYING STATE (Plays her uploaded GIF, MP4, or high-end particle placeholder)
                   <motion.div
                     key="playing-state"
                     initial={{ opacity: 0 }}
@@ -184,15 +190,29 @@ export default function Hero({ language }: HeroProps) {
                     className="absolute inset-0 flex flex-col items-stretch bg-black z-20"
                   >
                     <div className="relative flex-1 overflow-hidden flex items-center justify-center">
-                      <img
-                        src={gifSrc}
-                        alt="Stella Intro Showreel GIF"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Fallback to beautiful cinematic looping abstract link if any missing local file error
-                          (e.target as HTMLImageElement).src = 'https://media.giphy.com/media/Y3vD6u8R6p8SgV9A77/giphy.gif';
-                        }}
-                      />
+                      {isVideo ? (
+                        <video
+                          src={gifSrc}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            setGifSrc('https://assets.mixkit.co/videos/preview/mixkit-girl-dancing-alone-on-the-beach-at-sunset-22851-large.mp4');
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={gifSrc}
+                          alt="Stella Intro Showreel GIF"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to original abstract link on error
+                            (e.target as HTMLImageElement).src = 'https://media.giphy.com/media/Y3vD6u8R6p8SgV9A77/giphy.gif';
+                          }}
+                        />
+                      )}
                       
                       {/* Technical CRT Screen overlays */}
                       <div className="absolute inset-0 bg-radial-gradient(circle, transparent 70%, rgba(0,0,0,0.4)) pointer-events-none" />
@@ -202,7 +222,7 @@ export default function Hero({ language }: HeroProps) {
                       </div>
                       
                       {/* Progress elapsed background indicators */}
-                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[9px] font-mono text-neutral-400">
+                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[9px] font-mono text-neutral-450">
                         {(4.5 * (progress / 100)).toFixed(1)}s / 4.5s
                       </div>
                     </div>
@@ -241,7 +261,7 @@ export default function Hero({ language }: HeroProps) {
                         initial={{ y: 15, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ delay: 0.1 }}
-                        className="font-display text-2.5xl sm:text-3xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-50 leading-tight"
+                        className="font-display text-2xl font-extrabold tracking-tight text-neutral-900 dark:text-neutral-50 leading-tight"
                       >
                         {language === 'zh' ? '了解张温雅' : 'Know about Stella Zhang'}
                       </motion.h3>
@@ -252,8 +272,8 @@ export default function Hero({ language }: HeroProps) {
                         className="font-sans text-xs text-neutral-500 dark:text-neutral-450 mt-2 leading-relaxed"
                       >
                         {language === 'zh'
-                          ? '融合深度数据洞察与极简音画的美学先锋。在字节跳动与汇丰等头部企业沉淀商业策略，以前沿 AI 技术演绎叙事想象。'
-                          : 'A strategic visionary bridging the high-tech matrix of market operations and atmospheric video craftsmanship. Fusing corporate analytics with AI cinema.'
+                          ? '上海财经大学研究生一年级在读，在金融、传媒、互联网、AI领域多方面尝试的Z时代商科生。'
+                          : 'First-year graduate student at Shanghai University of Finance and Economics, a Gen Z business student exploring multiple fields including finance, media, internet, and AI.'
                         }
                       </motion.p>
                     </div>
@@ -275,18 +295,18 @@ export default function Hero({ language }: HeroProps) {
                         className="flex items-center gap-1.5 text-[10px] font-mono tracking-wider font-semibold text-neutral-600 dark:text-neutral-300 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors uppercase py-1"
                       >
                         <Upload className="w-3.5 h-3.5 text-neutral-500" />
-                        <span>{language === 'zh' ? '自定义 GIF' : 'UPLOAD GIF'}</span>
+                        <span>{language === 'zh' ? '自定义 视频/GIF' : 'UPLOAD VIDEO/GIF'}</span>
                       </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Hidden file input for uploading actual GIF */}
+              {/* Hidden file input for uploading actual GIF/Video */}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/gif,image/*"
+                accept="image/gif,image/*,video/mp4,video/quicktime,video/webm"
                 onChange={handleGifUpload}
                 className="hidden"
               />

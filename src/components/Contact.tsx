@@ -36,7 +36,7 @@ export default function Contact({ language }: ContactProps) {
     {
       id: 'wechat' as const,
       label: language === 'zh' ? '微信平台与网络' : 'WeChat / LinkedIn',
-      value: 'zwy2588867 / 张温雅',
+      value: 'Stella Zhang',
       subtext: language === 'zh' ? '添加微信咨询合作与详情' : 'Add on WeChat to collaborate',
       actionLabel: language === 'zh' ? '复制微信' : 'Copy ID',
       icon: MessageSquare,
