@@ -16,14 +16,33 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
 
   // Custom opening & looping video URLs that can be dynamically updated or uploaded
   const [openingVideo, setOpeningVideo] = useState<string>(() => {
-    return localStorage.getItem('cinema_opening_video') || 'https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-30043-large.mp4';
+    return localStorage.getItem('cinema_opening_video') || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
   });
   const [loopingVideo, setLoopingVideo] = useState<string>(() => {
-    return localStorage.getItem('cinema_looping_video') || 'https://assets.mixkit.co/videos/preview/mixkit-girl-dancing-alone-on-the-beach-at-sunset-22851-large.mp4';
+    return localStorage.getItem('cinema_looping_video') || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4';
   });
 
   const openingRef = useRef<HTMLVideoElement>(null);
   const loopingRef = useRef<HTMLVideoElement>(null);
+
+  // Programmatic play trigger to defeat strict browser restrictions
+  useEffect(() => {
+    if (phase === 'opening') {
+      const playPromise = openingRef.current?.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.log('Autoplay blocked by browser policy. Retrying programmatically...', error?.message || String(error));
+        });
+      }
+    } else if (phase === 'looping') {
+      const playPromise = loopingRef.current?.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((error) => {
+          console.log('Loop video autoplay blocked. Retrying programmatically...', error?.message || String(error));
+        });
+      }
+    }
+  }, [phase, openingVideo, loopingVideo, isMuted]);
 
   // Phase 1: Opening 4-second film sequence
   useEffect(() => {
@@ -96,8 +115,8 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
   const resetVideosToDefault = () => {
     localStorage.removeItem('cinema_opening_video');
     localStorage.removeItem('cinema_looping_video');
-    setOpeningVideo('https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-30043-large.mp4');
-    setLoopingVideo('https://assets.mixkit.co/videos/preview/mixkit-girl-dancing-alone-on-the-beach-at-sunset-22851-large.mp4');
+    setOpeningVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
+    setLoopingVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4');
   };
 
   return (
@@ -155,8 +174,13 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
             </div>
           </div>
 
-          {/* Core Video Player Arena */}
+          {/* Core Video Player Arena with Animated Fallbacks */}
           <div className="absolute inset-0 w-full h-full bg-neutral-950 flex items-center justify-center">
+            {/* Ambient Kinetic background when video is loading or blocked */}
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-950 via-neutral-950 to-emerald-950 opacity-90 animate-pulse duration-5000" />
+            <div className="absolute top-1/4 left-1/4 w-[350px] h-[350px] bg-emerald-500/10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
+            <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+
             {phase === 'opening' ? (
               <video
                 ref={openingRef}
@@ -164,10 +188,10 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                 autoPlay
                 playsInline
                 muted={isMuted}
-                className="w-full h-full object-cover transition-opacity duration-1000"
-                onError={(e) => {
-                  console.error('Opening video load error - fallback utilized');
-                  setOpeningVideo('https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-30043-large.mp4');
+                className="w-full h-full object-cover relative z-10"
+                onError={() => {
+                  console.warn('Opening video load failed - fallback loaded');
+                  setOpeningVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4');
                 }}
               />
             ) : (
@@ -178,17 +202,17 @@ export default function CinemaIntro({ language, onEnter }: CinemaIntroProps) {
                 loop
                 playsInline
                 muted={isMuted}
-                className="w-full h-full object-cover transition-opacity duration-1000 animate-fade-in"
-                onError={(e) => {
-                  console.error('Looping video load error - fallback utilized');
-                  setLoopingVideo('https://assets.mixkit.co/videos/preview/mixkit-girl-dancing-alone-on-the-beach-at-sunset-22851-large.mp4');
+                className="w-full h-full object-cover relative z-10"
+                onError={() => {
+                  console.warn('Looping video load failed - fallback loaded');
+                  setLoopingVideo('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4');
                 }}
               />
             )}
 
             {/* Cinematic Gradient Mask on the edges */}
-            <div className="absolute inset-0 bg-radial-gradient(circle, transparent 60%, rgba(0,0,0,0.85) 100%) pointer-events-none" />
-            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-radial-gradient(circle, transparent 55%, rgba(0,0,0,0.9) 100%) pointer-events-none z-15" />
+            <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black to-transparent pointer-events-none z-15" />
           </div>
 
           {/* Interactive Dynamic Prompt Overlay */}
